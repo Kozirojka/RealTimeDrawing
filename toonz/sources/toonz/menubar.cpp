@@ -1,6 +1,7 @@
 
 
 #include "menubar.h"
+#include "collabsession.h"
 #include "customhelplink.h"
 
 // Tnz6 includes
@@ -1733,6 +1734,8 @@ TopBar::TopBar(QWidget *parent) : QToolBar(parent) {
     }
     mainLayout->addLayout(menuLayout);
     mainLayout->addStretch(1);
+    mainLayout->addWidget(new CollabButton(this), 0);
+    mainLayout->addSpacing(8);
     mainLayout->addWidget(m_roomTabBar, 0);
     mainLayout->addSpacing(2);
     mainLayout->addWidget(m_lockRoomCB, 0);

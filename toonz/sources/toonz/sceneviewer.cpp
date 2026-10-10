@@ -4,6 +4,7 @@
 
 // Toonz includes
 #include "tapp.h"
+#include "collabsession.h"
 #include "viewerpane.h"
 #include "onionskinmaskgui.h"
 #include "viewerdraw.h"
@@ -863,6 +864,10 @@ SceneViewer::SceneViewer(ImageUtils::FullScreenWidget *parent)
     m_lutCalibrator = new LutCalibrator();
   if (Preferences::instance()->is30bitDisplayEnabled())
     setTextureFormat(TGL_TexFmt10);
+
+  // show the collaborator's cursor
+  connect(CollabSession::instance(), &CollabSession::peerCursorChanged, this,
+          [this]() { update(); });
 }
 
 //-----------------------------------------------------------------------------
@@ -1927,6 +1932,70 @@ void SceneViewer::drawOverlay() {
       tglDrawSegment(TPointD(0, -4), TPointD(0, 5));
     }
   }
+
+  // collaborator's cursor on top of everything
+  if (!m_drawCameraTest) drawPeerCursor();
+}
+
+//-----------------------------------------------------------------------------
+// Draws the collaborator's cursor (in world coordinates, so it lands on the
+// same spot of the drawing regardless of each user's zoom/pan).
+
+void SceneViewer::drawPeerCursor() {
+  CollabSession *session = CollabSession::instance();
+  if (!session->hasPeerCursor() || m_isLocator || m_draw3DMode) return;
+
+  glPushMatrix();
+  tglMultMatrix(getViewMatrix());
+  double px = sqrt(tglGetPixelSize2()) * getDevPixRatio();
+  if (px <= 0) px = 1;
+
+  TPointD pos     = session->peerCursor();
+  bool sameFrame  = session->peerCursorRow() ==
+                   TApp::instance()->getCurrentFrame()->getFrame();
+  QColor color    = session->peerColor();
+  double alpha    = sameFrame ? 1.0 : 0.45;
+
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glEnable(GL_LINE_SMOOTH);
+
+  // dark outline for contrast on white paper
+  glLineWidth(3.0);
+  glColor4d(0, 0, 0, 0.5 * alpha);
+  tglDrawCircle(pos, 7 * px);
+
+  glLineWidth(2.0);
+  glColor4d(color.redF(), color.greenF(), color.blueF(), alpha);
+  tglDrawCircle(pos, 7 * px);
+  if (sameFrame) tglDrawDisk(pos, 2.5 * px);
+  tglDrawSegment(pos + TPointD(-13 * px, 0), pos + TPointD(-9 * px, 0));
+  tglDrawSegment(pos + TPointD(9 * px, 0), pos + TPointD(13 * px, 0));
+  tglDrawSegment(pos + TPointD(0, -13 * px), pos + TPointD(0, -9 * px));
+  tglDrawSegment(pos + TPointD(0, 9 * px), pos + TPointD(0, 13 * px));
+
+  // label: name (+ frame number when the peer is on another frame).
+  // GLUT stroke fonts only cover ASCII.
+  std::string label;
+  for (QChar c : session->peerName())
+    if (c.unicode() >= 32 && c.unicode() < 127) label += (char)c.unicode();
+  if (label.empty()) label = "Peer";
+  if (!sameFrame && session->peerCursorRow() >= 0)
+    label += " (fr " + std::to_string(session->peerCursorRow() + 1) + ")";
+
+  // tglDrawText scales by 0.07 -> ~8.3 units cap height; aim for ~11 px
+  double textScale = 11.0 * px / 8.3;
+  glPushMatrix();
+  glTranslated(pos.x + 15 * px, pos.y - 18 * px, 0);
+  glScaled(textScale, textScale, 1);
+  glLineWidth(1.5);
+  tglDrawText(TPointD(), label);
+  glPopMatrix();
+
+  glLineWidth(1.0);
+  glDisable(GL_LINE_SMOOTH);
+  glDisable(GL_BLEND);
+  glPopMatrix();
 }
 
 //-----------------------------------------------------------------------------

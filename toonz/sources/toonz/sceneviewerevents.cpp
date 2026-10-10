@@ -9,6 +9,7 @@
 #include "sceneviewerevents.h"
 #include "viewerpane.h"
 #include "tapp.h"
+#include "collabsession.h"
 #include "iocommand.h"
 #include "menubarcommandids.h"
 #include "onionskinmaskgui.h"
@@ -427,6 +428,8 @@ void SceneViewer::onLeave() {
 
   m_isMouseEntered = false;
 
+  if (!m_isLocator) CollabSession::instance()->clearLocalCursor();
+
   if (m_freezedStatus != NO_FREEZED) return;
   TTool *tool = TApp::instance()->getCurrentTool()->getTool();
   if (tool && tool->isEnabled()) tool->onLeave();
@@ -530,6 +533,11 @@ void SceneViewer::onMove(const TMouseEvent &event) {
   QPointF curPos  = event.mousePos() * devPixRatio;
   bool cursorSet  = false;
   m_lastMousePos  = curPos;
+
+  // share the cursor position with the collaborator
+  if (!m_isLocator && !m_draw3DMode &&
+      CollabSession::instance()->isConnected())
+    CollabSession::instance()->setLocalCursor(winToWorld(curPos));
 
   if (event.buttons() == Qt::LeftButton && m_mouseScrubbing > 0) {
     if (m_mouseScrubbing == 1) {

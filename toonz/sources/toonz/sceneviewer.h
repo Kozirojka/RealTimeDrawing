@@ -336,6 +336,7 @@ protected:
   void drawPreview();
   void drawOverlay();
   void drawViewerIndicators();
+  void drawPeerCursor();
 
   void drawScene();
   void drawToolGadgets();

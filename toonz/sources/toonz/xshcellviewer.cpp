@@ -15,6 +15,7 @@
 #include "keyframedata.h"
 #include "columnselection.h"
 #include "orientation.h"
+#include "collabsession.h"
 
 // TnzTools includes
 #include "tools/cursormanager.h"
@@ -1188,6 +1189,10 @@ CellArea::CellArea(XsheetViewer *parent, Qt::WindowFlags flags)
   m_renameCell->hide();
   setFocusPolicy(Qt::NoFocus);
   setObjectName("XsheetCellArea");
+
+  // repaint when the collaborator moves to another frame / column
+  connect(CollabSession::instance(), &CollabSession::peerPresenceChanged, this,
+          [this]() { update(); });
 }
 
 //-----------------------------------------------------------------------------
@@ -1890,6 +1895,69 @@ void CellArea::drawFocusCellBorder(QPainter &p) {
   p.setPen(QPen(color, 2, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin));
   p.setBrush(Qt::NoBrush);
   p.drawRect(rect);
+}
+
+//-----------------------------------------------------------------------------
+// Highlights the frame and the cell where the collaborator currently is.
+
+void CellArea::drawPeerPresence(QPainter &p) {
+  CollabSession *session = CollabSession::instance();
+  if (!session->hasPeerPresence()) return;
+
+  int row = session->peerRow();
+  int col = session->peerCol();
+  TXsheet *xsh = m_viewer->getXsheet();
+  if (!xsh || row < 0) return;
+  // the peer may point to a column that does not exist here yet
+  if (col >= xsh->getColumnCount()) col = -1;
+
+  const Orientation *o = m_viewer->orientation();
+  QPoint frameAdj      = m_viewer->getFrameZoomAdjustment();
+  QPoint xy            = m_viewer->positionToXY(CellPosition(row, col));
+  QRect cellRect = o->rect((col < 0) ? PredefinedRect::CAMERA_CELL
+                                     : PredefinedRect::CELL)
+                       .translated(xy)
+                       .adjusted(1, 1, -1 - frameAdj.x(), -frameAdj.y());
+
+  QColor color = session->peerColor();
+  p.save();
+
+  // 1. tint the whole frame (row) lightly
+  QRect frameRect;
+  if (o->isVerticalTimeline())
+    frameRect = QRect(0, cellRect.top(), width(), cellRect.height());
+  else
+    frameRect = QRect(cellRect.left(), 0, cellRect.width(), height());
+  QColor rowColor = color;
+  rowColor.setAlpha(40);
+  p.fillRect(frameRect, rowColor);
+
+  // 2. the collaborator's cell: tint + thick border
+  QColor cellColor = color;
+  cellColor.setAlpha(90);
+  p.fillRect(cellRect, cellColor);
+  p.setPen(QPen(color, 3, Qt::SolidLine, Qt::SquareCap, Qt::MiterJoin));
+  p.setBrush(Qt::NoBrush);
+  p.drawRect(cellRect.adjusted(1, 1, -1, -1));
+
+  // 3. name tag (initials) at the end of the cell
+  QString name = session->peerName();
+  if (!name.isEmpty()) {
+    QString tag = name.left(2).toUpper();
+    QFont font  = p.font();
+    font.setPixelSize(std::max(8, std::min(11, cellRect.height() - 3)));
+    font.setBold(true);
+    p.setFont(font);
+    QFontMetrics fm(font);
+    int tagW = fm.horizontalAdvance(tag) + 6;
+    QRect tagRect(cellRect.right() - tagW, cellRect.top(), tagW,
+                  std::min(cellRect.height(), fm.height() + 2));
+    p.fillRect(tagRect, color);
+    p.setPen(Qt::black);
+    p.drawText(tagRect, Qt::AlignCenter, tag);
+  }
+
+  p.restore();
 }
 
 //-----------------------------------------------------------------------------
@@ -3169,6 +3237,9 @@ void CellArea::paintEvent(QPaintEvent *event) {
 
   // focus cell border
   drawFocusCellBorder(p);
+
+  // collaborator's current frame and cell
+  drawPeerPresence(p);
 
   if (getDragTool()) getDragTool()->drawCellsArea(p);
 }

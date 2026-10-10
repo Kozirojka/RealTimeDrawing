@@ -5,9 +5,11 @@ concurrency:
   cancel-in-progress: ${{ github.head_ref != '' }}
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - master  # Specify branches where the workflow should run
+      - multiplayer
     paths:
       - '**/*'                                    # Include all files in the repository
       - '!appveyor.yml'                           # Ignore changes in AppVeyor

@@ -128,6 +128,7 @@ class CellArea final : public QWidget {
                        bool isKeyFrame = false, bool isCamera = false);
 
   void drawFocusCellBorder(QPainter &p);
+  void drawPeerPresence(QPainter &p);
 
   // Returns true
   bool getEaseHandles(int r0, int r1, double e0, double e1, int &rh0, int &rh1);

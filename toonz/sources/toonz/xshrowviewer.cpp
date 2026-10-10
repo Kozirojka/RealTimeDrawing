@@ -1,6 +1,7 @@
 
 
 #include "xshrowviewer.h"
+#include "collabsession.h"
 #include "xsheetviewer.h"
 #include "tapp.h"
 #include "toonz/tscenehandle.h"
@@ -254,6 +255,9 @@ RowArea::RowArea(XsheetViewer *parent, Qt::WindowFlags flags)
   // for displaying the pinned center keys when the skeleton tool is selected
   connect(TApp::instance()->getCurrentTool(), SIGNAL(toolSwitched()), this,
           SLOT(update()));
+  // collaborator's frame marker
+  connect(CollabSession::instance(), &CollabSession::peerPresenceChanged, this,
+          [this]() { update(); });
 }
 
 //-----------------------------------------------------------------------------
@@ -605,6 +609,36 @@ void RowArea::drawCurrentRowGadget(QPainter &p, int r0, int r1) {
   QPoint frameAdj = m_viewer->getFrameZoomAdjustment();
   header.adjust(1, 1, -frameAdj.x(), -frameAdj.y());
   p.fillRect(header, m_viewer->getCurrentRowBgColor());
+}
+
+//-----------------------------------------------------------------------------
+// Marks the frame number where the collaborator currently is.
+
+void RowArea::drawPeerRowGadget(QPainter &p, int r0, int r1) {
+  CollabSession *session = CollabSession::instance();
+  if (!session->hasPeerPresence()) return;
+  int peerRow = session->peerRow();
+  if (peerRow < r0 || r1 < peerRow) return;
+
+  QPoint topLeft = m_viewer->positionToXY(CellPosition(peerRow, -1));
+  if (!m_viewer->orientation()->isVerticalTimeline())
+    topLeft.setY(0);
+  else
+    topLeft.setX(0);
+  QRect header = m_viewer->orientation()
+                     ->rect(PredefinedRect::FRAME_HEADER)
+                     .translated(topLeft);
+  QPoint frameAdj = m_viewer->getFrameZoomAdjustment();
+  header.adjust(1, 1, -frameAdj.x(), -frameAdj.y());
+
+  QColor color = session->peerColor();
+  color.setAlpha(140);
+  p.fillRect(header, color);
+  // solid stripe so it stays visible over the current-frame highlight
+  QRect stripe = m_viewer->orientation()->isVerticalTimeline()
+                     ? QRect(header.left(), header.top(), 4, header.height())
+                     : QRect(header.left(), header.top(), header.width(), 4);
+  p.fillRect(stripe, session->peerColor());
 }
 
 #if defined(x64)
@@ -1172,6 +1206,8 @@ void RowArea::paintEvent(QPaintEvent *event) {
   if (TApp::instance()->getCurrentFrame()->isEditingScene())
     // current frame
     drawCurrentRowGadget(p, r0, r1);
+
+  drawPeerRowGadget(p, r0, r1);
 
 #if defined(x64)
   StopMotion *stopMotion = StopMotion::instance();
